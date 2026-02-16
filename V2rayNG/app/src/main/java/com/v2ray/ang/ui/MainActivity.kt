@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import androidx.viewpager2.widget.ViewPager2 
 import com.google.android.material.navigation.NavigationView
 import com.google.android.material.tabs.TabLayoutMediator
 import com.v2ray.ang.AppConfig
@@ -74,6 +75,20 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
         binding.viewPager.adapter = groupPagerAdapter
         binding.viewPager.isUserInputEnabled = true
 
+        // هذا هو التعديل الجديد: مراقبة تغيير الصفحة
+        binding.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                // إذا كنا في الصفحة الأولى (0)، اظهر الزر
+                if (position == 0) {
+                    binding.fab.show()
+                } else {
+                    // إذا كنا في أي صفحة أخرى (قائمة السيرفرات)، اخفِ الزر
+                    binding.fab.hide()
+                }
+            }
+        })
+
         // setup navigation drawer
         val toggle = ActionBarDrawerToggle(
             this, binding.drawerLayout, binding.toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close
@@ -119,16 +134,29 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
 
         tabMediator?.detach()
         tabMediator = TabLayoutMediator(binding.tabGroup, binding.viewPager) { tab, position ->
-            groupPagerAdapter.groups.getOrNull(position)?.let {
-                tab.text = it.remarks
-                tab.tag = it.id
+            // هنا نخفي التبويب للصفحة الأولى لأننا نريدها نظيفة
+            if (position == 0) {
+                tab.text = "Home" // يمكنك تغيير الاسم أو تركه
+            } else {
+                groupPagerAdapter.groups.getOrNull(position - 1)?.let {
+                    tab.text = it.remarks
+                    tab.tag = it.id
+                }
             }
         }.also { it.attach() }
 
-        val targetIndex = groups.indexOfFirst { it.id == mainViewModel.subscriptionId }.takeIf { it >= 0 } ?: (groups.size - 1)
+        // نحاول العودة لآخر سيرفر مستخدم، لكن نتأكد من عدم حدوث خطأ
+        // إذا لم يكن هناك سيرفر محدد، نبدأ من الصفحة الأولى (Home)
+        val targetIndex = if (mainViewModel.subscriptionId.isNotEmpty()) {
+             val idx = groups.indexOfFirst { it.id == mainViewModel.subscriptionId }
+             if (idx >= 0) idx + 1 else 0 // +1 because index 0 is Home
+        } else {
+            0
+        }
         binding.viewPager.setCurrentItem(targetIndex, false)
-
-        binding.tabGroup.isVisible = groups.size > 1
+        
+        // إخفاء شريط التبويبات العلوي إذا كنا نريد مظهراً أنظف (اختياري، حالياً يظهر إذا كان هناك أكثر من مجموعة)
+        binding.tabGroup.isVisible = groups.size > 0 
     }
 
     private fun handleFabAction() {
